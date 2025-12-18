@@ -161,44 +161,44 @@ export async function POST(request: NextRequest) {
     }
 
     // Apply rate limiting using dynamic config
-    {
-      const rlCfg = settings.rateLimit;
-      const rateLimitResult = await checkWhatsAppRateLimit(
-        businessPhone!,
-        customerPhone!,
-        {
-          perNumberLimit: rlCfg.perNumberLimit,
-          globalLimit: rlCfg.globalLimit,
-          windowSeconds: rlCfg.windowSeconds,
-        }
-      );
+    // {
+    //   const rlCfg = settings.rateLimit;
+    //   const rateLimitResult = await checkWhatsAppRateLimit(
+    //     businessPhone!,
+    //     customerPhone!,
+    //     {
+    //       perNumberLimit: rlCfg.perNumberLimit,
+    //       globalLimit: rlCfg.globalLimit,
+    //       windowSeconds: rlCfg.windowSeconds,
+    //     }
+    //   );
 
-      if (!rateLimitResult.allowed) {
-        console.log(
-          `Rate limit exceeded for ${customerPhone} -> ${businessPhone}:`,
-          rateLimitResult.reason
-        );
+    //   if (!rateLimitResult.allowed) {
+    //     console.log(
+    //       `Rate limit exceeded for ${customerPhone} -> ${businessPhone}:`,
+    //       rateLimitResult.reason
+    //     );
 
-        // Send rate limit message back to customer
-        const twiml = new twilio.twiml.MessagingResponse();
-        // const resetTimeFormatted = new Date(
-        //   rateLimitResult.resetTime
-        // ).toLocaleTimeString();
+    //     // Send rate limit message back to customer
+    //     const twiml = new twilio.twiml.MessagingResponse();
+    //     // const resetTimeFormatted = new Date(
+    //     //   rateLimitResult.resetTime
+    //     // ).toLocaleTimeString();
 
-        twiml.message(
-          `⏰ You've reached the message limit for this hour. Please try again after 1 hour from now. Thank you for your patience!`
-        );
+    //     twiml.message(
+    //       `⏰ You've reached the message limit for this hour. Please try again after 1 hour from now. Thank you for your patience!`
+    //     );
 
-        return new Response(twiml.toString(), {
-          headers: { "Content-Type": "text/xml" },
-        });
-      }
+    //     return new Response(twiml.toString(), {
+    //       headers: { "Content-Type": "text/xml" },
+    //     });
+    //   }
 
-      // Log successful rate limit check
-      console.log(
-        `Rate limit check passed for ${customerPhone} -> ${businessPhone}. Remaining: ${rateLimitResult.remainingRequests}`
-      );
-    }
+    //   // Log successful rate limit check
+    //   console.log(
+    //     `Rate limit check passed for ${customerPhone} -> ${businessPhone}. Remaining: ${rateLimitResult.remainingRequests}`
+    //   );
+    // }
 
     // Check usage quota
     if (user.usage_count >= user.usage_limit) {
