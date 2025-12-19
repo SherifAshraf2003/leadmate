@@ -13,6 +13,9 @@ export const userSchema = z.object({
   twilio_sender_sid: z.string(),
   twilio_waba_id: z.string(),
   whatsapp_status: z.string(),
+  // GREEN-API fields
+  greenapi_instance_id: z.string().optional(),
+  greenapi_token: z.string().optional(),
   subscription_status: z.enum(["trial", "active", "cancelled"]),
   usage_count: z.number(),
   usage_limit: z.number(),

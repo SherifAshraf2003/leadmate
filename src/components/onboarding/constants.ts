@@ -44,4 +44,8 @@ export const INITIAL_ONBOARDING_DATA = {
   senderSid: "",
   whatsappActivated: false,
   activationStatus: "PENDING",
+  // GREEN-API fields
+  greenApiInstanceId: "",
+  greenApiToken: "",
+  greenApiConnected: false,
 };

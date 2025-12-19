@@ -8,6 +8,10 @@ export interface OnboardingData {
   senderSid: string;
   whatsappActivated: boolean;
   activationStatus: string;
+  // GREEN-API fields
+  greenApiInstanceId: string;
+  greenApiToken: string;
+  greenApiConnected: boolean;
 }
 
 export interface AvailableNumber {

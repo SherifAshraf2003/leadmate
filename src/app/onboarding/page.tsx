@@ -6,7 +6,7 @@ import { Bot, Sparkles } from "lucide-react";
 import {
   BusinessInfoStep,
   KnowledgeUploadStep,
-  WhatsAppActivationStep,
+  GreenApiActivationStep,
   CompletionStep,
   type OnboardingData,
   INITIAL_ONBOARDING_DATA,
@@ -34,8 +34,8 @@ function SimplifiedOnboardingProgress({
     },
     {
       number: 3,
-      title: "WhatsApp Access",
-      description: "Activate your chatbot",
+      title: "Connect WhatsApp",
+      description: "Set up GREEN-API",
     },
     { number: 4, title: "Complete", description: "You're all set!" },
   ];
@@ -111,7 +111,7 @@ function SimplifiedOnboardingNavigation({
       case 2:
         return data.knowledgeContent?.trim();
       case 3:
-        return data.whatsappActivated;
+        return data.greenApiConnected;
       default:
         return true;
     }
@@ -270,7 +270,7 @@ export default function OnboardingPage() {
                 )}
                 {step === 3 && (
                   <div className="animate-in fade-in slide-in-from-right-4 duration-500">
-                    <WhatsAppActivationStep data={data} setData={setData} />
+                    <GreenApiActivationStep data={data} setData={setData} />
                   </div>
                 )}
                 {step === 4 && (
