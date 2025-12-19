@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/server";
 
 const GREENAPI_PARTNER_TOKEN = process.env.GREENAPI_PARTNER_TOKEN;
 const WEBHOOK_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL;
@@ -13,18 +13,8 @@ interface CreateInstanceResponse {
 // POST - Connect user's own GREEN-API instance (or create via partner API if available)
 export async function POST(request: NextRequest) {
   try {
-    // Get user from auth
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        global: {
-          headers: {
-            Authorization: request.headers.get("Authorization") || "",
-          },
-        },
-      }
-    );
+    // Get user from auth (uses cookies)
+    const supabase = await createClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -187,18 +177,8 @@ export async function POST(request: NextRequest) {
 // DELETE - Disconnect user's GREEN-API instance
 export async function DELETE(request: NextRequest) {
   try {
-    // Get user from auth
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        global: {
-          headers: {
-            Authorization: request.headers.get("Authorization") || "",
-          },
-        },
-      }
-    );
+    // Get user from auth (uses cookies)
+    const supabase = await createClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -280,18 +260,8 @@ export async function DELETE(request: NextRequest) {
 // GET - Get user's GREEN-API instance status
 export async function GET(request: NextRequest) {
   try {
-    // Get user from auth
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        global: {
-          headers: {
-            Authorization: request.headers.get("Authorization") || "",
-          },
-        },
-      }
-    );
+    // Get user from auth (uses cookies)
+    const supabase = await createClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {

@@ -1,22 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/server";
 
 // GET - Get QR code for WhatsApp authorization
 export async function GET(request: NextRequest) {
   try {
-    // Get user from auth
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        global: {
-          headers: {
-            Authorization: request.headers.get("Authorization") || "",
-          },
-        },
-      }
-    );
+    // Get user from auth (uses cookies)
+    const supabase = await createClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -89,18 +79,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get user from auth
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        global: {
-          headers: {
-            Authorization: request.headers.get("Authorization") || "",
-          },
-        },
-      }
-    );
+    // Get user from auth (uses cookies)
+    const supabase = await createClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -157,4 +137,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

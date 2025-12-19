@@ -8,7 +8,6 @@ import {
   CheckCircle,
   AlertCircle,
   Loader2,
-  Copy,
   QrCode,
   Key,
   ChevronDown,
@@ -23,15 +22,93 @@ const GREENAPI_CONSOLE_URL = "https://console.green-api.com";
 
 type ConnectionStatus = "idle" | "connecting" | "connected" | "error";
 
+// Moved OUTSIDE the component to prevent re-creation on every render
+function StepCard({
+  stepNumber,
+  title,
+  children,
+  imageSrc,
+  imageAlt,
+  isExpanded,
+  onToggle,
+}: {
+  stepNumber: number;
+  title: string;
+  children: React.ReactNode;
+  imageSrc?: string;
+  imageAlt?: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="border-2 border-border rounded-base overflow-hidden">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center gap-4 p-4 bg-secondary-background hover:bg-secondary-background/80 transition-colors"
+      >
+        <div className="w-8 h-8 bg-main rounded-base border border-border flex items-center justify-center flex-shrink-0">
+          <span className="text-sm font-semibold text-main-foreground">
+            {stepNumber}
+          </span>
+        </div>
+        <h5 className="text-sm font-medium text-foreground flex-1 text-left">
+          {title}
+        </h5>
+        {isExpanded ? (
+          <ChevronUp className="h-4 w-4 text-foreground/60" />
+        ) : (
+          <ChevronDown className="h-4 w-4 text-foreground/60" />
+        )}
+      </button>
+
+      {isExpanded && (
+        <div className="p-4 border-t-2 border-border bg-background">
+          <div className="space-y-4">
+            {children}
+            {imageSrc && (
+              <div className="relative w-full aspect-video bg-secondary-background rounded-base border-2 border-border overflow-hidden flex items-center justify-center">
+                <Image
+                  src={imageSrc}
+                  alt={imageAlt || "Step screenshot"}
+                  fill
+                  className="object-contain"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = "none";
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function GreenApiActivationStep({
   data,
   setData,
 }: OnboardingStepProps) {
   const [status, setStatus] = useState<ConnectionStatus>("idle");
   const [error, setError] = useState<string>("");
-  const [expandedStep, setExpandedStep] = useState<number | null>(1);
+  const [expandedStep, setExpandedStep] = useState<number | null>(4); // Start with credentials step open
   const [qrCode, setQrCode] = useState<string>("");
   const [instanceStatus, setInstanceStatus] = useState<string>("");
+  
+  // Local state for inputs to prevent parent re-renders on every keystroke
+  const [localInstanceId, setLocalInstanceId] = useState(data.greenApiInstanceId);
+  const [localApiToken, setLocalApiToken] = useState(data.greenApiToken);
+
+  // Sync local state to parent when values change (debounced via blur or explicit sync)
+  const syncToParent = () => {
+    if (localInstanceId !== data.greenApiInstanceId || localApiToken !== data.greenApiToken) {
+      setData({
+        ...data,
+        greenApiInstanceId: localInstanceId,
+        greenApiToken: localApiToken,
+      });
+    }
+  };
 
   // Check existing connection on mount
   useEffect(() => {
@@ -42,11 +119,7 @@ export default function GreenApiActivationStep({
 
   const checkConnectionStatus = async () => {
     try {
-      const response = await fetch("/api/greenApi/instance", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("access_token") || ""}`,
-        },
-      });
+      const response = await fetch("/api/greenApi/instance");
       const result = await response.json();
 
       if (result.connected && result.status === "authorized") {
@@ -55,7 +128,6 @@ export default function GreenApiActivationStep({
         setData({ ...data, greenApiConnected: true });
       } else if (result.connected) {
         setInstanceStatus(result.status);
-        // Fetch QR if not authorized
         if (result.status === "notAuthorized") {
           fetchQrCode();
         }
@@ -67,11 +139,7 @@ export default function GreenApiActivationStep({
 
   const fetchQrCode = async () => {
     try {
-      const response = await fetch("/api/greenApi/qr", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("access_token") || ""}`,
-        },
-      });
+      const response = await fetch("/api/greenApi/qr");
       const result = await response.json();
 
       if (result.status === "authorized") {
@@ -87,7 +155,10 @@ export default function GreenApiActivationStep({
   };
 
   const handleConnect = async () => {
-    if (!data.greenApiInstanceId || !data.greenApiToken) {
+    // Sync local state first
+    syncToParent();
+    
+    if (!localInstanceId || !localApiToken) {
       setError("Please enter both Instance ID and API Token");
       return;
     }
@@ -100,11 +171,10 @@ export default function GreenApiActivationStep({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("access_token") || ""}`,
         },
         body: JSON.stringify({
-          instanceId: data.greenApiInstanceId,
-          apiToken: data.greenApiToken,
+          instanceId: localInstanceId,
+          apiToken: localApiToken,
         }),
       });
 
@@ -119,10 +189,9 @@ export default function GreenApiActivationStep({
       if (result.status === "authorized") {
         setStatus("connected");
         setInstanceStatus("authorized");
-        setData({ ...data, greenApiConnected: true });
+        setData({ ...data, greenApiInstanceId: localInstanceId, greenApiToken: localApiToken, greenApiConnected: true });
       } else {
         setInstanceStatus(result.status);
-        // Need to scan QR code
         setExpandedStep(4);
         fetchQrCode();
       }
@@ -134,68 +203,6 @@ export default function GreenApiActivationStep({
 
   const toggleStep = (step: number) => {
     setExpandedStep(expandedStep === step ? null : step);
-  };
-
-  const StepCard = ({
-    stepNumber,
-    title,
-    children,
-    imageSrc,
-    imageAlt,
-  }: {
-    stepNumber: number;
-    title: string;
-    children: React.ReactNode;
-    imageSrc?: string;
-    imageAlt?: string;
-  }) => {
-    const isExpanded = expandedStep === stepNumber;
-
-    return (
-      <div className="border-2 border-border rounded-base overflow-hidden">
-        <button
-          onClick={() => toggleStep(stepNumber)}
-          className="w-full flex items-center gap-4 p-4 bg-secondary-background hover:bg-secondary-background/80 transition-colors"
-        >
-          <div className="w-8 h-8 bg-main rounded-base border border-border flex items-center justify-center flex-shrink-0">
-            <span className="text-sm font-semibold text-main-foreground">
-              {stepNumber}
-            </span>
-          </div>
-          <h5 className="text-sm font-medium text-foreground flex-1 text-left">
-            {title}
-          </h5>
-          {isExpanded ? (
-            <ChevronUp className="h-4 w-4 text-foreground/60" />
-          ) : (
-            <ChevronDown className="h-4 w-4 text-foreground/60" />
-          )}
-        </button>
-
-        {isExpanded && (
-          <div className="p-4 border-t-2 border-border bg-background">
-            <div className="space-y-4">
-              {children}
-              {imageSrc && (
-                <div className="relative w-full aspect-video bg-secondary-background rounded-base border-2 border-border overflow-hidden flex items-center justify-center">
-                  <Image
-                    src={imageSrc}
-                    alt={imageAlt || "Step screenshot"}
-                    fill
-                    className="object-contain"
-                    onError={(e) => {
-                      // Hide broken image
-                      (e.target as HTMLImageElement).style.display = "none";
-                    }}
-                  />
-                 
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    );
   };
 
   return (
@@ -240,6 +247,8 @@ export default function GreenApiActivationStep({
             title="Create a FREE GREEN-API Account"
             imageSrc="/images/greenapi/step1-signup.png"
             imageAlt="GREEN-API signup page"
+            isExpanded={expandedStep === 1}
+            onToggle={() => toggleStep(1)}
           >
             <p className="text-xs text-foreground/70">
               Go to GREEN-API and create a free account. The Developer plan
@@ -262,6 +271,8 @@ export default function GreenApiActivationStep({
             title="Create a New Instance"
             imageSrc="/images/greenapi/step2-create-instance.png"
             imageAlt="Create instance button"
+            isExpanded={expandedStep === 2}
+            onToggle={() => toggleStep(2)}
           >
             <p className="text-xs text-foreground/70">
               After signing up, click "Create Instance" in your dashboard. This
@@ -275,6 +286,8 @@ export default function GreenApiActivationStep({
             title="Scan QR Code with WhatsApp"
             imageSrc="/images/greenapi/step3-scan-qr.png"
             imageAlt="QR code scanning"
+            isExpanded={expandedStep === 3}
+            onToggle={() => toggleStep(3)}
           >
             <p className="text-xs text-foreground/70">
               Open WhatsApp on your phone → Settings → Linked Devices → Link a
@@ -294,6 +307,8 @@ export default function GreenApiActivationStep({
             title="Copy Your Credentials"
             imageSrc="/images/greenapi/step4-copy-credentials.png"
             imageAlt="Instance credentials"
+            isExpanded={expandedStep === 4}
+            onToggle={() => toggleStep(4)}
           >
             <p className="text-xs text-foreground/70">
               After your WhatsApp is connected, copy the <strong>Instance ID</strong> and{" "}
@@ -314,10 +329,9 @@ export default function GreenApiActivationStep({
                   id="instanceId"
                   type="text"
                   placeholder="e.g., 7105431366"
-                  value={data.greenApiInstanceId}
-                  onChange={(e) =>
-                    setData({ ...data, greenApiInstanceId: e.target.value })
-                  }
+                  value={localInstanceId}
+                  onChange={(e) => setLocalInstanceId(e.target.value)}
+                  onBlur={syncToParent}
                   className="font-mono"
                 />
               </div>
@@ -334,10 +348,9 @@ export default function GreenApiActivationStep({
                   id="apiToken"
                   type="password"
                   placeholder="Your API token from GREEN-API"
-                  value={data.greenApiToken}
-                  onChange={(e) =>
-                    setData({ ...data, greenApiToken: e.target.value })
-                  }
+                  value={localApiToken}
+                  onChange={(e) => setLocalApiToken(e.target.value)}
+                  onBlur={syncToParent}
                   className="font-mono"
                 />
               </div>
@@ -353,8 +366,8 @@ export default function GreenApiActivationStep({
                 onClick={handleConnect}
                 disabled={
                   status === "connecting" ||
-                  !data.greenApiInstanceId ||
-                  !data.greenApiToken
+                  !localInstanceId ||
+                  !localApiToken
                 }
                 className="w-full bg-green-500 hover:bg-green-600 text-white"
               >
