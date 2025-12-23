@@ -3,7 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 
 const GREENAPI_PARTNER_TOKEN = process.env.GREENAPI_PARTNER_TOKEN;
-const WEBHOOK_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL;
+const WEBHOOK_BASE_URL = process.env.NEXT_PUBLIC_APP_URL;
 
 interface CreateInstanceResponse {
   idInstance: number;
@@ -16,7 +16,10 @@ export async function POST(request: NextRequest) {
     // Get user from auth (uses cookies)
     const supabase = await createClient();
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -35,14 +38,17 @@ export async function POST(request: NextRequest) {
 
       if (!validateResponse.ok) {
         return NextResponse.json(
-          { error: "Invalid GREEN-API credentials. Please check your Instance ID and API Token." },
+          {
+            error:
+              "Invalid GREEN-API credentials. Please check your Instance ID and API Token.",
+          },
           { status: 400 }
         );
       }
 
       // Configure webhook URL on their instance
       const webhookUrl = `${WEBHOOK_BASE_URL}/api/webhooks/greenApi`;
-      
+
       const settingsResponse = await fetch(
         `https://api.green-api.com/waInstance${instanceId}/setSettings/${apiToken}`,
         {
@@ -58,7 +64,10 @@ export async function POST(request: NextRequest) {
       );
 
       if (!settingsResponse.ok) {
-        console.error("Failed to configure webhook:", await settingsResponse.text());
+        console.error(
+          "Failed to configure webhook:",
+          await settingsResponse.text()
+        );
         // Continue anyway - user can configure manually
       }
 
@@ -85,9 +94,10 @@ export async function POST(request: NextRequest) {
         success: true,
         instanceId: instanceId,
         status: stateData.stateInstance,
-        message: stateData.stateInstance === "authorized" 
-          ? "WhatsApp is connected and ready!"
-          : "Instance connected. Please authorize WhatsApp by scanning the QR code.",
+        message:
+          stateData.stateInstance === "authorized"
+            ? "WhatsApp is connected and ready!"
+            : "Instance connected. Please authorize WhatsApp by scanning the QR code.",
         webhookConfigured: settingsResponse.ok,
       });
     }
@@ -103,13 +113,16 @@ export async function POST(request: NextRequest) {
 
       if (existingUser?.greenapi_instance_id) {
         return NextResponse.json(
-          { error: "You already have a GREEN-API instance connected", instanceId: existingUser.greenapi_instance_id },
+          {
+            error: "You already have a GREEN-API instance connected",
+            instanceId: existingUser.greenapi_instance_id,
+          },
           { status: 400 }
         );
       }
 
       const webhookUrl = `${WEBHOOK_BASE_URL}/api/webhooks/greenApi`;
-      
+
       const response = await fetch(
         `https://api.green-api.com/partner/createInstance/${GREENAPI_PARTNER_TOKEN}`,
         {
@@ -155,13 +168,13 @@ export async function POST(request: NextRequest) {
 
     // No credentials provided and no partner token
     return NextResponse.json(
-      { 
+      {
         error: "Please provide your GREEN-API credentials",
         instructions: {
           step1: "Create a free account at https://console.green-api.com",
           step2: "Copy your Instance ID and API Token from the dashboard",
           step3: "Enter them here to connect",
-        }
+        },
       },
       { status: 400 }
     );
@@ -180,7 +193,10 @@ export async function DELETE(request: NextRequest) {
     // Get user from auth (uses cookies)
     const supabase = await createClient();
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -263,7 +279,10 @@ export async function GET(request: NextRequest) {
     // Get user from auth (uses cookies)
     const supabase = await createClient();
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

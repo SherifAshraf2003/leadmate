@@ -21,6 +21,7 @@ import TwilioInfo from "@/components/dashboard/settings/TwilioInfo";
 import AccountStatus from "@/components/dashboard/settings/AccountStatus";
 import BusinessInfo from "@/components/dashboard/settings/BusinessInfo";
 import ProfilePictureUpload from "@/components/dashboard/settings/ProfilePictureUpload";
+import GreenApiSettings from "@/components/dashboard/settings/GreenApiSettings";
 
 export default function SettingsForm({
   settingsData,
@@ -162,8 +163,14 @@ export default function SettingsForm({
         {/* Account Status */}
         <AccountStatus settings={settings} />
 
-        {/* WhatsApp Configuration */}
-        <TwilioInfo settings={settings} />
+        {/* GREEN-API WhatsApp Connection */}
+        <GreenApiSettings 
+          instanceId={settings.greenapi_instance_id} 
+          hasToken={!!settings.greenapi_token}
+        />
+
+        {/* Legacy Twilio Configuration (if applicable) */}
+        {settings.whatsapp_number && <TwilioInfo settings={settings} />}
       </Form>
     </div>
   );

@@ -3,12 +3,16 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 
 // GET - Get QR code for WhatsApp authorization
+// Documentation: https://green-api.com/en/docs/api/account/QR/
 export async function GET(request: NextRequest) {
   try {
     // Get user from auth (uses cookies)
     const supabase = await createClient();
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -29,35 +33,63 @@ export async function GET(request: NextRequest) {
     }
 
     // Get QR code from GREEN-API
+    // Response types: qrCode, error, alreadyLogged
     const qrResponse = await fetch(
       `https://api.green-api.com/waInstance${userData.greenapi_instance_id}/qr/${userData.greenapi_token}`
     );
 
+    // Handle non-OK HTTP responses (network errors, server errors)
     if (!qrResponse.ok) {
-      const errorData = await qrResponse.json();
-      
-      // If already authorized, return that status
-      if (errorData.type === "alreadyLogged") {
-        return NextResponse.json({
-          status: "authorized",
-          message: "WhatsApp is already connected",
-        });
-      }
-
       return NextResponse.json(
-        { error: "Failed to get QR code", details: errorData },
+        { error: "Failed to connect to GREEN-API", status: qrResponse.status },
         { status: qrResponse.status }
       );
     }
 
     const qrData = await qrResponse.json();
 
-    // qrData.message contains base64 QR code image
-    return NextResponse.json({
-      status: "pending",
-      qrCode: qrData.message, // Base64 encoded QR image
-      type: qrData.type,
-    });
+    console.log("qrData", qrData);
+
+    // Handle response based on type field
+    // Docs: type can be "qrCode", "error", or "alreadyLogged"
+    switch (qrData.type) {
+      case "qrCode":
+        // Successfully got QR code - message contains base64 image
+        // Prepend data URI scheme for direct use in <img src="">
+        return NextResponse.json({
+          status: "pending",
+          qrCode: `data:image/png;base64,${qrData.message}`,
+          type: qrData.type,
+        });
+
+      case "alreadyLogged":
+        // Instance is already authorized
+        return NextResponse.json({
+          status: "authorized",
+          message: "WhatsApp is already connected",
+          type: qrData.type,
+        });
+
+      case "error":
+        // Error occurred - message contains error description
+        // Common error: "Instance has auth. You need to make log out"
+        // This means auth data exists but is invalid, need to logout and rescan
+        return NextResponse.json(
+          {
+            error: qrData.message || "Error getting QR code",
+            type: qrData.type,
+            needsLogout: qrData.message?.includes("log out") || false,
+          },
+          { status: 400 }
+        );
+
+      default:
+        // Unknown response type
+        return NextResponse.json(
+          { error: "Unknown response from GREEN-API", details: qrData },
+          { status: 500 }
+        );
+    }
   } catch (error) {
     console.error("Error getting QR code:", error);
     return NextResponse.json(
@@ -82,7 +114,10 @@ export async function POST(request: NextRequest) {
     // Get user from auth (uses cookies)
     const supabase = await createClient();
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

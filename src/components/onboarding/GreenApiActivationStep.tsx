@@ -12,6 +12,7 @@ import {
   Key,
   ChevronDown,
   ChevronUp,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -93,6 +94,7 @@ export default function GreenApiActivationStep({
   const [error, setError] = useState<string>("");
   const [expandedStep, setExpandedStep] = useState<number | null>(4); // Start with credentials step open
   const [qrCode, setQrCode] = useState<string>("");
+  const [qrLoading, setQrLoading] = useState(false);
   const [instanceStatus, setInstanceStatus] = useState<string>("");
   
   // Local state for inputs to prevent parent re-renders on every keystroke
@@ -117,6 +119,44 @@ export default function GreenApiActivationStep({
     }
   }, []);
 
+  // Poll for authorization status when QR code is displayed
+  useEffect(() => {
+    if (instanceStatus !== "notAuthorized" || !qrCode) {
+      return;
+    }
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch("/api/greenApi/instance");
+        const result = await response.json();
+
+        if (result.status === "authorized") {
+          setStatus("connected");
+          setInstanceStatus("authorized");
+          setData({ ...data, greenApiConnected: true });
+          setQrCode(""); // Clear QR code
+        }
+      } catch (err) {
+        console.error("Failed to poll status:", err);
+      }
+    }, 3000); // Check every 3 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [instanceStatus, qrCode, data, setData]);
+
+  // Auto-refresh QR code every 15 seconds (expires in 20s per GREEN-API docs)
+  useEffect(() => {
+    if (instanceStatus !== "notAuthorized" || !qrCode || qrLoading) {
+      return;
+    }
+
+    const refreshInterval = setInterval(() => {
+      fetchQrCode();
+    }, 15000); // Refresh every 15 seconds
+
+    return () => clearInterval(refreshInterval);
+  }, [instanceStatus, qrCode, qrLoading]);
+
   const checkConnectionStatus = async () => {
     try {
       const response = await fetch("/api/greenApi/instance");
@@ -138,6 +178,7 @@ export default function GreenApiActivationStep({
   };
 
   const fetchQrCode = async () => {
+    setQrLoading(true);
     try {
       const response = await fetch("/api/greenApi/qr");
       const result = await response.json();
@@ -151,6 +192,8 @@ export default function GreenApiActivationStep({
       }
     } catch (err) {
       console.error("Failed to fetch QR:", err);
+    } finally {
+      setQrLoading(false);
     }
   };
 
@@ -191,8 +234,10 @@ export default function GreenApiActivationStep({
         setInstanceStatus("authorized");
         setData({ ...data, greenApiInstanceId: localInstanceId, greenApiToken: localApiToken, greenApiConnected: true });
       } else {
+        // Reset to idle so UI shows QR code section, not loading state
+        setStatus("idle");
         setInstanceStatus(result.status);
-        setExpandedStep(4);
+        setExpandedStep(null); // Collapse steps to show QR code prominently
         fetchQrCode();
       }
     } catch (err) {
@@ -390,28 +435,61 @@ export default function GreenApiActivationStep({
 
       {/* QR Code Display (if credentials connected but WhatsApp not authorized) */}
       {instanceStatus === "notAuthorized" && qrCode && (
-        <div className="bg-secondary-background p-6 rounded-base border-2 border-border">
-          <div className="text-center space-y-4">
-            <div className="flex items-center justify-center gap-2">
-              <QrCode className="h-5 w-5 text-foreground" />
-              <h4 className="text-lg font-semibold text-foreground">
-                Scan QR Code
-              </h4>
+        <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-base border-2 border-green-200 shadow-shadow">
+          <div className="flex flex-col items-center gap-5">
+            {/* Header */}
+            <div className="text-center space-y-2">
+              <div className="inline-flex items-center justify-center gap-2 bg-green-500 text-white px-4 py-2 rounded-full">
+                <QrCode className="h-4 w-4" />
+                <span className="text-sm font-semibold">Scan to Connect</span>
+              </div>
+              <p className="text-sm text-green-800/80 max-w-xs">
+                Open WhatsApp → Settings → Linked Devices → Scan this code
+              </p>
             </div>
-            <p className="text-sm text-foreground/70">
-              Open WhatsApp → Settings → Linked Devices → Scan this QR code
-            </p>
-            <div className="bg-white p-4 rounded-base inline-block">
-              <img
-                src={qrCode}
-                alt="WhatsApp QR Code"
-                className="w-48 h-48 object-contain"
-              />
+
+            {/* QR Code Container */}
+            <div className="relative">
+              <div className="absolute -inset-1 bg-gradient-to-r from-green-400 to-emerald-400 rounded-xl blur opacity-30"></div>
+              <div className="relative bg-white p-4 rounded-xl border-2 border-green-200 shadow-lg">
+                <img
+                  src={qrCode}
+                  alt="WhatsApp QR Code"
+                  className="w-52 h-52 object-contain"
+                />
+              </div>
             </div>
-            <Button variant="neutral" size="sm" onClick={fetchQrCode}>
-              <Loader2 className="h-4 w-4 mr-2" />
-              Refresh QR Code
-            </Button>
+
+            {/* Footer with status */}
+            <div className="flex flex-col items-center gap-3">
+              {/* Waiting indicator */}
+              <div className="flex items-center gap-2 text-green-700">
+                <div className="relative">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-ping absolute"></div>
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                </div>
+                <span className="text-sm font-medium">Waiting for scan...</span>
+              </div>
+              
+              <p className="text-xs text-green-700/60">
+                QR code auto-refreshes every 15 seconds
+              </p>
+              
+              <Button 
+                variant="neutral" 
+                size="sm" 
+                onClick={fetchQrCode}
+                disabled={qrLoading}
+                className="bg-white hover:bg-green-50 border-green-200 text-green-700 hover:text-green-800 transition-colors"
+              >
+                {qrLoading ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                {qrLoading ? "Refreshing..." : "Refresh Now"}
+              </Button>
+            </div>
           </div>
         </div>
       )}

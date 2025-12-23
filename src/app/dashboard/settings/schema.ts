@@ -26,6 +26,9 @@ export const getSettingsSchema = SettingsInputSchema.extend({
   usage_count: z.number().optional().or(z.literal(0)),
   usage_limit: z.number().optional().or(z.literal(500)),
   stripe_customer_id: z.string().optional().or(z.literal(null)),
+  // GREEN-API fields
+  greenapi_instance_id: z.string().optional().nullable(),
+  greenapi_token: z.string().optional().nullable(),
 });
 
 export type TSettingsInput = z.infer<typeof SettingsInputSchema>;
