@@ -276,7 +276,13 @@ export async function extractLeadInformation(
     // Extract the function call result
     const toolCall = completion.choices[0]?.message?.tool_calls?.[0];
 
-    if (!toolCall || toolCall.function.name !== "extract_lead_information") {
+    // openai v7 types tool_calls as a union of function and custom calls, so
+    // the type check is required to reach `.function`.
+    if (
+      !toolCall ||
+      toolCall.type !== "function" ||
+      toolCall.function.name !== "extract_lead_information"
+    ) {
       throw new Error("No valid function call response from extraction AI");
     }
 
