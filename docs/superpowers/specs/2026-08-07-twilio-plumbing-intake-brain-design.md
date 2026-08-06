@@ -18,7 +18,8 @@ This work adds a parallel route; it removes nothing.
 - No change to `src/app/api/webhooks/whatsapp/route.ts`.
 - No Supabase reads or writes: no `users`, `conversations`, `leads`, or `knowledge_base`.
 - No dashboard integration, no lead extraction, no usage metering.
-- No SDK upgrades and no `package.json` changes.
+- No behavioural change to any existing OpenAI caller. The `openai` SDK is upgraded, but the
+  four existing call sites keep their current models and parameters.
 
 ## Architecture
 
@@ -41,8 +42,8 @@ state store contain no plumbing-specific logic.
    a mismatch would reject every request during the demo.
 3. Read `From`, `Body`, `NumMedia`, `MediaUrl0`.
 4. Load conversation history for `From` from the in-memory store.
-5. Append the customer turn. When `NumMedia > 0`, append the marker
-   `[customer sent a photo]` and record the media URL on the session.
+5. Append the customer turn. When `NumMedia > 0`, fetch and inline the image (see Media
+   handling below).
 6. Call OpenAI `gpt-5.4-mini` with the plumbing system prompt, the history, and one tool
    definition, `confirm_booking`.
 7. If the model calls `confirm_booking`, send the owner summary and reply with the model's
@@ -52,13 +53,57 @@ state store contain no plumbing-specific logic.
 
 ## Model access
 
-`gpt-5.4-mini` is called over plain `fetch` against the OpenAI HTTP API, not through the
-`openai` package. The repo pins `openai@^4.67.3`, which predates the GPT-5 family and sends
-`max_tokens` where GPT-5.x requires `max_completion_tokens`. Upgrading the SDK would touch
-every existing OpenAI caller, which this work is not permitted to disturb. A direct `fetch`
-confines the change to one file.
+The official `openai` package is upgraded from the pinned `^4.67.3` to `^7.4.0`. The pinned
+version predates the GPT-5 family and sends `max_tokens`, which GPT-5.x rejects in favour of
+`max_completion_tokens`.
+
+Four existing call sites import the SDK:
+
+- `src/app/api/webhooks/greenApi/route.ts`
+- `src/app/api/webhooks/whatsapp/route.ts`
+- `src/lib/services/openai/openai.ts`
+- `src/lib/services/leads/extraction.ts`
+
+All four use only `chat.completions.create` or `embeddings.create`, whose signatures are
+stable across the v4 to v7 range, and all four stay on `gpt-4o-mini` with `max_tokens`
+unchanged. The upgrade is therefore expected to be a no-op for them, but this is an
+assumption to verify, not to trust: the implementation must run `tsc --noEmit` after the bump
+and confirm all four files compile before any further work. If the upgrade breaks a caller,
+stop and report rather than refactoring existing routes.
+
+The new route uses `max_completion_tokens`, as required by GPT-5.x.
 
 The API key comes from `OPENAI_KEY`, matching the existing routes.
+
+## Media handling
+
+WhatsApp inbound supports JPG, JPEG, PNG, audio, and PDF, up to 16MB per message. Twilio
+exposes each attachment as `MediaUrl{n}` with a matching `MediaContentType{n}`, and retains
+the media for 13 months.
+
+`gpt-5.4-mini` accepts image input, so the photo is read rather than merely acknowledged.
+This matters for the intake: the model can judge a ceiling stain's severity or read a boiler
+pressure gauge directly off the picture.
+
+Handling, for the first attachment only:
+
+1. If `MediaContentType0` is not an image type, ignore the attachment and append the marker
+   `[customer sent a non-image attachment]`.
+2. Otherwise fetch `MediaUrl0` with an `Authorization: Basic` header built from
+   `TWILIO_ACCOUNT_SID:TWILIO_AUTH_TOKEN`. Media URLs are unauthenticated by default, and
+   Basic Auth is an opt-in account setting, so the header is sent unconditionally: harmless
+   when the setting is off, required when it is on.
+3. Encode the bytes as a base64 `data:` URL and attach it to the turn as an `image_url`
+   content block. Inlining is necessary because a pre-signed or authenticated Twilio URL is
+   not fetchable by OpenAI.
+4. Record that a photo was received on the session, for `confirm_booking`.
+
+Only the first attachment is processed, and only images. Fetch failures degrade to the
+`[customer sent a photo]` text marker rather than failing the reply, so a media problem never
+costs the customer a response.
+
+Whether the sandbox passes inbound media through is verified in testing step 5 before the
+demo, not assumed.
 
 ## Intake flow
 
@@ -157,7 +202,13 @@ Manual, over the sandbox, since the deliverable is a demo:
    summary arrives.
 3. Gas smell — confirm the 0800 111 999 refusal and that no owner summary is sent.
 4. Price question — confirm no figure is given.
-5. Photo — send an image, confirm it is acknowledged and flagged in the owner summary.
+5. Photo — send an image of a leak, confirm the sandbox delivers the media, that the model's
+   reply demonstrates it actually read the image rather than merely acknowledging it, and
+   that `photo_received` is set in the owner summary.
+6. Non-image attachment — send a PDF, confirm the flow continues without error.
+
+Ahead of all of the above, run `tsc --noEmit` after the SDK bump and confirm the four
+existing OpenAI call sites still compile.
 
 ## Demo prerequisites
 
