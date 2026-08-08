@@ -1433,98 +1433,23 @@ git commit -m "feat: add Twilio WhatsApp plumbing intake webhook"
 
 ---
 
-### Task 8: Sandbox verification
+### Task 8: Live verification and runbook — DONE
 
 **Files:**
-- Create: `docs/superpowers/plans/2026-08-07-plumbing-demo-runbook.md`
+- Created: `docs/superpowers/plans/2026-08-08-plumbing-demo-runbook.md`
 
-**Interfaces:**
-- Consumes: the deployed route from Task 7
-- Produces: a runbook the user follows on demo day
+The sandbox steps originally written here never applied: the business number
+`+12182503154` is an approved WhatsApp sender, so customers message it directly and there is
+no join code, no shared `+14155238886`, and no 72-hour expiry. What does apply is WhatsApp's
+24-hour freeform window on the owner summary, and the guard that stops the owner's
+window-opening message being triaged as a customer.
 
-No code. This task confirms the thing actually works over real WhatsApp and writes down how to repeat it.
+Verified end to end on live WhatsApp on 2026-08-08: inbound and reply, a real photo read by
+the model, triage and safety advice per fault, the gas-smell refusal firing no booking, price
+deferral, the booking guardrail holding under pressure, `confirm_booking` firing, and the
+owner summary confirmed `delivered` via the Twilio API.
 
-- [ ] **Step 1: Confirm the prerequisites with the user before testing**
-
-Ask the user to confirm all three. Do not proceed until they have:
-
-1. Their own handset has joined the Twilio sandbox — text the join code to `+14155238886`.
-2. **The owner number in `src/lib/demo/niches/plumbing.ts` has also joined the sandbox.** Without this the summary send fails silently and the demo looks broken at its most important moment. Update `OWNER_WHATSAPP` to a number that has actually joined.
-3. `SLOT_A` and `SLOT_B` hold the real windows they want to offer, not the placeholders.
-
-- [ ] **Step 2: Expose the local server**
-
-```bash
-npm run dev
-```
-
-In a second shell:
-
-```bash
-ngrok http 3000
-```
-
-Note the `https://` forwarding URL.
-
-- [ ] **Step 3: Point the sandbox at it**
-
-In the Twilio console, under Messaging → Try it out → Send a WhatsApp message → Sandbox settings, set **"When a message comes in"** to:
-
-```
-https://<your-ngrok-subdomain>.ngrok-free.app/api/webhooks/plumbing
-```
-
-Method: `POST`. Save.
-
-- [ ] **Step 4: Test the routine path**
-
-From the joined handset, send: `my kitchen tap won't stop dripping`
-
-Verify, in order:
-- A reply arrives that reads as a plain-spoken tradesperson, not a chatbot.
-- It asks for the postcode and a photo.
-- After supplying both, it offers exactly `SLOT_A` and `SLOT_B` and no others.
-- Picking one produces a confirmation.
-- The owner's handset receives the summary, with the correct postcode and slot.
-
-- [ ] **Step 5: Test the gas smell path**
-
-Start a fresh conversation — restart `npm run dev` to clear the in-memory store — and send: `I can smell gas in the kitchen`
-
-Verify:
-- The reply tells them to leave the property, not touch switches, and ring `0800 111 999`.
-- **No booking is offered and no owner summary arrives.** Check the owner's handset to confirm.
-
-- [ ] **Step 6: Test the price refusal**
-
-Send: `how much will it cost?`
-
-Verify: no figure, no range, no "around". The reply defers to the owner.
-
-- [ ] **Step 7: Test the photo path**
-
-Send a photo of a leak, stain, or boiler pressure gauge.
-
-Verify: the reply refers to something actually visible in the image. A generic "thanks for the photo" means the image is not reaching the model — check the dev server log for `[plumbing] media fetch failed` and confirm `NumMedia` arrived as `1`.
-
-- [ ] **Step 8: Test a non-image attachment**
-
-Send a PDF.
-
-Verify: the conversation continues without an error and without the model pretending to have seen a picture.
-
-- [ ] **Step 9: Write the runbook**
-
-Create `docs/superpowers/plans/2026-08-07-plumbing-demo-runbook.md` recording: the ngrok start command, the exact sandbox setting to change, the join-code requirement for both handsets, the 72-hour sandbox expiry, the fact that restarting the dev server wipes conversation state, and which file to edit to retarget the niche.
-
-- [ ] **Step 10: Commit**
-
-```bash
-git add docs/superpowers/plans/2026-08-07-plumbing-demo-runbook.md
-git commit -m "docs: add plumbing demo runbook"
-```
-
----
+See the runbook for setup, the smoke test, failure modes, and how to retarget the niche.
 
 ## Self-Review
 
