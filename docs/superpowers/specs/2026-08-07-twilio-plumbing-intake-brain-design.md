@@ -1,13 +1,13 @@
 # Twilio WhatsApp Plumbing Intake Brain — Design
 
 **Date:** 2026-08-07
-**Status:** Approved, pending implementation plan
+**Status:** Implemented and verified end to end on live WhatsApp, 2026-08-08
 
 ## Purpose
 
 Extract the Twilio-to-LLM conversational core from the existing app into a standalone,
 niche-customisable "brain". The first niche is an out-of-hours plumbing intake flow, used
-for a live demo over the Twilio WhatsApp sandbox.
+for a live demo over WhatsApp on an approved Twilio sender.
 
 The existing GreenAPI transport and the existing Supabase-backed webhook stay untouched.
 This work adds a parallel route; it removes nothing.
@@ -23,16 +23,22 @@ This work adds a parallel route; it removes nothing.
 
 ## Architecture
 
-Three new files:
+Five new files, split so that everything trade-specific lives in exactly one of them:
 
 | File | Responsibility |
 | --- | --- |
-| `src/app/api/webhooks/plumbing/route.ts` | HTTP boundary: Twilio signature check, form parsing, TwiML response |
-| `src/lib/demo/plumbing/prompt.ts` | Niche configuration: firm details, system prompt, slot strings, owner number |
-| `src/lib/demo/plumbing/state.ts` | In-memory conversation store keyed by customer phone |
+| `src/app/api/webhooks/plumbing/route.ts` | HTTP boundary: signature check, form parsing, media block, TwiML response, owner send |
+| `src/lib/demo/brain/types.ts` | Shared types: `Turn`, `Session`, `NicheConfig`, `BookingDetails`, `BrainResult` |
+| `src/lib/demo/brain/state.ts` | In-memory conversation store keyed by customer phone |
+| `src/lib/demo/brain/media.ts` | Twilio media URL to base64 data URL, image gating |
+| `src/lib/demo/brain/run.ts` | One LLM turn: history plus niche to reply or booking |
+| `src/lib/demo/niches/plumbing.ts` | The niche: firm details, system prompt, booking schema, owner summary format |
 
-Swapping `prompt.ts` for another niche's file is the intended reuse path. The route and the
-state store contain no plumbing-specific logic.
+Adding a file under `niches/` is the entire cost of retargeting to another trade. Nothing
+under `brain/` contains plumbing-specific logic.
+
+`src/middleware.ts` excludes `/api/webhooks/plumbing` from its matcher, so the route runs
+without a Supabase client and needs no Supabase environment variables.
 
 ## Request flow
 
@@ -41,6 +47,9 @@ state store contain no plumbing-specific logic.
    `NODE_ENV !== "production"`, because the ngrok host must match the signed URL exactly and
    a mismatch would reject every request during the demo.
 3. Read `From`, `Body`, `NumMedia`, `MediaUrl0`.
+   Inbound from `OWNER_WHATSAPP` returns an empty `<Response/>` here and goes no further:
+   the owner texts the business number only to reopen WhatsApp's 24-hour window, and must
+   not be triaged as a customer.
 4. Load conversation history for `From` from the in-memory store.
 5. Append the customer turn. When `NumMedia > 0`, fetch and inline the image (see Media
    handling below).
@@ -73,7 +82,8 @@ stop and report rather than refactoring existing routes.
 
 The new route uses `max_completion_tokens`, as required by GPT-5.x.
 
-The API key comes from `OPENAI_KEY`, matching the existing routes.
+The API key is read from `OPENAI_KEY`, falling back to `OPENAI_API_KEY`, so the brain works
+whichever name a given machine has set.
 
 ## Media handling
 
@@ -102,8 +112,7 @@ Only the first attachment is processed, and only images. Fetch failures degrade 
 `[customer sent a photo]` text marker rather than failing the reply, so a media problem never
 costs the customer a response.
 
-Whether the sandbox passes inbound media through is verified in testing step 5 before the
-demo, not assumed.
+Inbound media delivery is verified in testing step 5 before the demo, not assumed.
 
 ## Intake flow
 
@@ -158,16 +167,24 @@ volunteer that it is an AI, but answers honestly if asked directly.
 | `slot` | string | One of the two configured slot strings |
 | `urgency` | `"emergency"` \| `"routine"` | |
 | `photo_received` | boolean | |
+| `confirmation_message` | string | The customer-facing confirmation, in the niche's voice |
 
-On a tool call the route sends a WhatsApp summary to the hard-coded owner number via the
-Twilio REST API. This send is fire-and-forget: a failure is logged and swallowed, never
-thrown, so a problem reaching the owner cannot prevent the customer receiving their
-confirmation.
+`confirmation_message` exists because GPT-5.x routinely returns empty `content` when it also
+calls a tool. Without it the most important message in the flow fell back to a fixed string,
+identical on every booking. Carrying the confirmation as a tool argument costs no extra call.
+The prompt must also forbid replying in plain text on the booking turn; an earlier wording
+made the model draft the reply twice and skip the tool entirely.
+
+On a tool call the route sends a WhatsApp summary to `OWNER_WHATSAPP` via the Twilio REST
+API. This send is fire-and-forget: a failure is logged and swallowed, never thrown, so a
+problem reaching the owner cannot prevent the customer receiving their confirmation. The log
+records the message SID and queue status rather than claiming delivery, which Twilio's
+response does not establish.
 
 ## Conversation state
 
-A module-level `Map<phone, { history, mediaUrls, updatedAt }>` with a two-hour TTL, swept
-lazily on read.
+A module-level `Map<phone, { history, photoReceived, updatedAt }>` with a two-hour TTL,
+swept lazily on read.
 
 This survives across requests under `next dev` and is lost on restart, which is correct for
 an ngrok-tunnelled demo. Upstash Redis is already a dependency and can replace the store
@@ -195,16 +212,17 @@ Environment variables, all of which the repo already uses: `TWILIO_ACCOUNT_SID`,
 
 ## Testing
 
-Manual, over the sandbox, since the deliverable is a demo:
+Manual, over real WhatsApp, since the deliverable is a demo:
 
-1. `next dev`, ngrok tunnel to port 3000, sandbox inbound webhook set to the tunnel URL.
+1. `next dev`, ngrok tunnel to the dev port, and the tunnel URL set as the inbound webhook on
+   the business number in the Twilio console.
 2. Routine fault — confirm the flow reaches two slots and a confirmation, and that the owner
    summary arrives.
 3. Gas smell — confirm the 0800 111 999 refusal and that no owner summary is sent.
 4. Price question — confirm no figure is given.
-5. Photo — send an image of a leak, confirm the sandbox delivers the media, that the model's
-   reply demonstrates it actually read the image rather than merely acknowledging it, and
-   that `photo_received` is set in the owner summary.
+5. Photo — send an image of a leak and confirm the model's reply demonstrates it actually read
+   the image rather than merely acknowledging it, and that `photo_received` is set in the
+   owner summary.
 6. Non-image attachment — send a PDF, confirm the flow continues without error.
 
 Ahead of all of the above, run `tsc --noEmit` after the SDK bump and confirm the four
@@ -212,8 +230,19 @@ existing OpenAI call sites still compile.
 
 ## Demo prerequisites
 
-- The owner's number must join the sandbox by texting the join code to +14155238886.
-  Without this the summary send fails silently.
-- Sandbox sessions expire after 72 hours idle; both handsets must re-join.
-- Sandbox `To` is always the shared +14155238886, which is why tenant resolution is absent
-  from this design: there is exactly one tenant, defined by `prompt.ts`.
+The business number is an approved WhatsApp sender, so customers message it directly and no
+sandbox or join code is involved.
+
+- **The 24-hour window.** WhatsApp only accepts freeform messages within 24 hours of the
+  recipient's last inbound message. The owner's handset must therefore have texted the
+  business number recently, or the summary is accepted by Twilio and rejected asynchronously
+  with error 63016. Any message from that handset resets the clock. The production fix is a
+  registered WhatsApp message template, which carries no window; it is unnecessary for a demo.
+- **The owner is not a customer.** The owner's window-opening message arrives at the same
+  webhook, so the route drops inbound from `OWNER_WHATSAPP` without replying. A consequence
+  worth remembering: the owner's handset cannot also play the customer during testing.
+- **Tenant resolution is absent by design.** There is exactly one tenant, defined by the niche
+  file. The route never inspects `To`.
+- **State is in memory.** Restarting the dev server wipes every conversation.
+- **The ngrok URL changes** whenever the tunnel restarts, and must be re-pasted into the
+  Twilio console.
