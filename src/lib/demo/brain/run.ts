@@ -79,9 +79,12 @@ export async function runBrainTurn(
     const booking = extractBooking(message?.tool_calls, niche.bookingToolName);
 
     if (booking) {
+      // Models routinely return empty content alongside a tool call, so the
+      // tool's own confirmation_message is the primary source here.
       return {
         kind: "booking",
-        text: text || FALLBACK_BOOKING_REPLY,
+        text:
+          booking.confirmation_message?.trim() || text || FALLBACK_BOOKING_REPLY,
         booking,
       };
     }

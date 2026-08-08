@@ -24,6 +24,13 @@ export type BookingDetails = {
   slot: string;
   urgency: "emergency" | "routine";
   photo_received: boolean;
+  /**
+   * The customer-facing confirmation, written by the model in the niche's
+   * voice. Carried as a tool argument because models routinely return an
+   * empty `content` when they also call a tool, which would otherwise leave
+   * the most important message in the flow as canned text.
+   */
+  confirmation_message: string;
 };
 
 /**

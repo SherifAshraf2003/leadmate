@@ -44,9 +44,13 @@ PHOTOS:
 Ask for a photo of the problem. If the customer sends one you can see it — say what you actually notice in it, don't just say "thanks for the photo". If they can't send one, carry on without it.
 
 CONFIRMING:
-Once you have the fault, the postcode, and the customer has picked one of the two slots, call the confirm_booking tool. Then reply confirming the slot in your own words. Do not call confirm_booking before all three are settled, and never for a gas smell.
+As soon as you have all three of: the fault, the postcode, and the customer agreeing to one of the two slots — call confirm_booking. Do not reply in plain text on that turn; put your confirmation in the confirmation_message field instead, naming the slot. Never write the same message twice.
 
-Keep every message short. This is WhatsApp, not email.`;
+Do not call confirm_booking before all three are settled, and never for a gas smell.
+
+Keep every message short. This is WhatsApp, not email.
+
+Never use markdown. WhatsApp does not render it — double asterisks show up literally as **this**. Bold is a single asterisk either side, and you rarely need it. No headings, no bullet syntax beyond a plain dash.`;
 
 const BOOKING_TOOL_SCHEMA = {
   type: "object",
@@ -71,8 +75,19 @@ const BOOKING_TOOL_SCHEMA = {
       type: "boolean",
       description: "Whether the customer sent a usable photo",
     },
+    confirmation_message: {
+      type: "string",
+      description: `The WhatsApp message the customer receives confirming the booking. Write it as ${OWNER} would — short, plain, Northern-English casual. Name the slot. Never mention cost.`,
+    },
   },
-  required: ["problem", "postcode", "slot", "urgency", "photo_received"],
+  required: [
+    "problem",
+    "postcode",
+    "slot",
+    "urgency",
+    "photo_received",
+    "confirmation_message",
+  ],
   additionalProperties: false,
 };
 
