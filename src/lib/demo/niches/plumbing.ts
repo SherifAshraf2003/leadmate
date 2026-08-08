@@ -7,8 +7,13 @@ export const FIRM = "Barlow Plumbing & Heating";
 export const AREA = "South Manchester";
 export const OWNER = "Dave";
 
-/** Must have joined the Twilio sandbox, or the summary send fails silently. */
-export const OWNER_WHATSAPP = "+447700900123";
+/**
+ * Where the booking summary goes. E.164, no `whatsapp:` prefix.
+ *
+ * Must have joined the Twilio sandbox — text the join code to +14155238886 —
+ * or the send is accepted by Twilio and silently never delivered.
+ */
+export const OWNER_WHATSAPP = process.env.OWNER_WHATSAPP ?? "";
 
 export const SLOT_A = "tonight, 7–9pm";
 export const SLOT_B = "tomorrow morning, 8–10am";

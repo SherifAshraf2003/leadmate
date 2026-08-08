@@ -45,6 +45,13 @@ async function sendOwnerSummary(summary: string): Promise<void> {
     return;
   }
 
+  if (!plumbingNiche.ownerWhatsApp) {
+    console.error(
+      "[plumbing] OWNER_WHATSAPP is not set, owner summary not sent"
+    );
+    return;
+  }
+
   try {
     await twilio(sid, token).messages.create({
       from: `whatsapp:${from.replace("whatsapp:", "")}`,
