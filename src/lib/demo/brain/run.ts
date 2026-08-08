@@ -20,7 +20,14 @@ const FALLBACK_REPLY =
 
 const FALLBACK_BOOKING_REPLY = "That's booked in. See you then.";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_KEY as string });
+/**
+ * The existing routes read OPENAI_KEY; .env.local currently uses the SDK's own
+ * OPENAI_API_KEY. Accept either so the demo does not depend on which one a
+ * given machine happens to have set.
+ */
+const openai = new OpenAI({
+  apiKey: (process.env.OPENAI_KEY ?? process.env.OPENAI_API_KEY) as string,
+});
 
 /**
  * Assistant turns are always plain strings; only user turns carry image parts.
