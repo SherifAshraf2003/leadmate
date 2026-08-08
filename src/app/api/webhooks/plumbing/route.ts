@@ -53,12 +53,18 @@ async function sendOwnerSummary(summary: string): Promise<void> {
   }
 
   try {
-    await twilio(sid, token).messages.create({
+    const message = await twilio(sid, token).messages.create({
       from: `whatsapp:${from.replace("whatsapp:", "")}`,
       to: `whatsapp:${plumbingNiche.ownerWhatsApp}`,
       body: summary,
     });
-    console.log("[plumbing] owner summary sent");
+
+    // "accepted" is not "delivered". WhatsApp rejects freeform messages sent
+    // more than 24h after the recipient last messaged in (error 63016), and
+    // that rejection lands asynchronously, well after this call returns.
+    console.log(
+      `[plumbing] owner summary queued: sid=${message.sid} status=${message.status}`
+    );
   } catch (error) {
     // Most likely cause: the owner's number has not joined the sandbox.
     console.error("[plumbing] owner summary failed:", error);
