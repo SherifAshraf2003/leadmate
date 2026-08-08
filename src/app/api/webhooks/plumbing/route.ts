@@ -34,6 +34,13 @@ function twiml(text: string): Response {
   });
 }
 
+/** An empty <Response/> tells Twilio to send the sender nothing at all. */
+function noReply(): Response {
+  return new Response(new twilio.twiml.MessagingResponse().toString(), {
+    headers: { "Content-Type": "text/xml" },
+  });
+}
+
 /** Fire-and-forget. A failure here must never cost the customer their reply. */
 async function sendOwnerSummary(summary: string): Promise<void> {
   const sid = process.env.TWILIO_ACCOUNT_SID;
@@ -66,7 +73,6 @@ async function sendOwnerSummary(summary: string): Promise<void> {
       `[plumbing] owner summary queued: sid=${message.sid} status=${message.status}`
     );
   } catch (error) {
-    // Most likely cause: the owner's number has not joined the sandbox.
     console.error("[plumbing] owner summary failed:", error);
   }
 }
@@ -96,6 +102,15 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[plumbing] ${from}: ${body.slice(0, 60)} (media: ${numMedia})`);
+
+    // The owner texts the business number to reopen WhatsApp's 24h freeform
+    // window so booking summaries can reach them. That message lands here like
+    // any other, so without this guard the bot would start triaging the owner
+    // as a customer.
+    if (plumbingNiche.ownerWhatsApp && from === plumbingNiche.ownerWhatsApp) {
+      console.log("[plumbing] owner inbound, 24h window open, not replying");
+      return noReply();
+    }
 
     const session = getSession(from);
 

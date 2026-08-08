@@ -10,8 +10,10 @@ export const OWNER = "Dave";
 /**
  * Where the booking summary goes. E.164, no `whatsapp:` prefix.
  *
- * Must have joined the Twilio sandbox — text the join code to +14155238886 —
- * or the send is accepted by Twilio and silently never delivered.
+ * WhatsApp only accepts freeform messages within 24 hours of the recipient's
+ * last inbound message, so this number must have texted the business number
+ * recently. Outside that window Twilio accepts the send and WhatsApp rejects
+ * it asynchronously with error 63016.
  */
 export const OWNER_WHATSAPP = process.env.OWNER_WHATSAPP ?? "";
 
