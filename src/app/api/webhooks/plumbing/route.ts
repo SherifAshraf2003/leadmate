@@ -6,6 +6,27 @@ import { runBrainTurn } from "@/lib/demo/brain/run";
 import { plumbingNiche } from "@/lib/demo/niches/plumbing";
 import type { TurnContent } from "@/lib/demo/brain/types";
 
+/** A photo turn runs ~5s; the platform default of 10s leaves no headroom. */
+export const maxDuration = 30;
+
+/**
+ * Rebuilds the URL Twilio actually called.
+ *
+ * `request.url` is the origin's view, which behind a proxy is not what Twilio
+ * signed — Vercel terminates TLS and forwards on a different host and scheme.
+ * Signing against it rejects every request. The forwarded headers carry the
+ * public values.
+ */
+function publicUrl(request: NextRequest): string {
+  const proto = request.headers.get("x-forwarded-proto") ?? "https";
+  const host =
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+
+  if (!host) return request.url;
+
+  return `${proto}://${host}${new URL(request.url).pathname}`;
+}
+
 /**
  * Verifies the request genuinely came from Twilio.
  *
@@ -13,7 +34,7 @@ import type { TurnContent } from "@/lib/demo/brain/types";
  * called, and an ngrok host that drifts would reject every request mid-demo.
  */
 function signatureIsValid(
-  url: string,
+  request: NextRequest,
   params: Record<string, string>,
   signature: string | null
 ): boolean {
@@ -22,7 +43,16 @@ function signatureIsValid(
   const token = process.env.TWILIO_AUTH_TOKEN;
   if (!token || !signature) return false;
 
-  return twilio.validateRequest(token, signature, url, params);
+  const url = publicUrl(request);
+  const valid = twilio.validateRequest(token, signature, url, params);
+
+  if (!valid) {
+    // Almost always a URL mismatch rather than an attack, and impossible to
+    // diagnose without seeing the URL the signature was checked against.
+    console.error(`[plumbing] signature check failed against ${url}`);
+  }
+
+  return valid;
 }
 
 function twiml(text: string): Response {
@@ -84,7 +114,7 @@ export async function POST(request: NextRequest) {
 
     if (
       !signatureIsValid(
-        request.url,
+        request,
         params,
         request.headers.get("x-twilio-signature")
       )
@@ -112,7 +142,7 @@ export async function POST(request: NextRequest) {
       return noReply();
     }
 
-    const session = getSession(from);
+    const session = await getSession(from);
 
     // Build this turn's content. Text first so the model reads the caption
     // before the image.
@@ -155,7 +185,7 @@ export async function POST(request: NextRequest) {
 
     const result = await runBrainTurn(history, plumbingNiche);
 
-    saveSession(from, {
+    await saveSession(from, {
       history: [...history, { role: "assistant", content: result.text }],
       photoReceived,
       updatedAt: session.updatedAt,
