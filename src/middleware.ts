@@ -21,8 +21,11 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
+     * - api/webhooks/plumbing (standalone demo webhook, no Supabase at all —
+     *   running updateSession here would demand Supabase env vars the demo
+     *   otherwise has no use for)
      * Feel free to modify this pattern to include more paths.
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/webhooks/plumbing|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
