@@ -71,6 +71,43 @@ function noReply(): Response {
   });
 }
 
+/**
+ * Shows "typing…" on the customer's phone while the brain runs, and marks
+ * their message as read. Twilio clears it on reply or after 25s.
+ *
+ * Deliberately not awaited: the brain call that follows takes seconds, which
+ * is more than enough for this POST to land before the function returns. A
+ * failure only costs the visual effect, never the reply. Public Beta endpoint,
+ * not yet wrapped by the Node SDK, hence raw fetch.
+ */
+function sendTypingIndicator(messageSid: string | undefined): void {
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+
+  if (!messageSid || !sid || !token) return;
+
+  fetch("https://messaging.twilio.com/v3/Indicators/Typing.json", {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString(
+        "base64"
+      )}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ channel: "whatsapp", messageId: messageSid }),
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        console.error(
+          `[plumbing] typing indicator failed: ${response.status} ${await response.text()}`
+        );
+      }
+    })
+    .catch((error) => {
+      console.error("[plumbing] typing indicator failed:", error);
+    });
+}
+
 /** Fire-and-forget. A failure here must never cost the customer their reply. */
 async function sendOwnerSummary(summary: string): Promise<void> {
   const sid = process.env.TWILIO_ACCOUNT_SID;
@@ -142,6 +179,8 @@ export async function POST(request: NextRequest) {
       return noReply();
     }
 
+    sendTypingIndicator(params.MessageSid);
+
     const session = await getSession(from);
 
     // Build this turn's content. Text first so the model reads the caption
@@ -185,11 +224,24 @@ export async function POST(request: NextRequest) {
 
     const result = await runBrainTurn(history, plumbingNiche);
 
+    // A silent turn still goes into history as the sentinel, so on the next
+    // turn the model can see it already went quiet and stays quiet.
     await saveSession(from, {
-      history: [...history, { role: "assistant", content: result.text }],
+      history: [
+        ...history,
+        {
+          role: "assistant",
+          content: result.kind === "silent" ? "[no reply]" : result.text,
+        },
+      ],
       photoReceived,
       updatedAt: session.updatedAt,
     });
+
+    if (result.kind === "silent") {
+      console.log("[plumbing] model chose silence, sending nothing");
+      return noReply();
+    }
 
     if (result.kind === "booking") {
       await sendOwnerSummary(

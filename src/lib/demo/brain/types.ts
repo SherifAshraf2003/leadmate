@@ -52,4 +52,6 @@ export type NicheConfig = {
 
 export type BrainResult =
   | { kind: "reply"; text: string }
-  | { kind: "booking"; text: string; booking: BookingDetails };
+  | { kind: "booking"; text: string; booking: BookingDetails }
+  /** The model chose to send nothing (dismissed off-topic chat). */
+  | { kind: "silent" };

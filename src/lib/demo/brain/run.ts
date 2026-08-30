@@ -89,6 +89,12 @@ export async function runBrainTurn(
       };
     }
 
+    // The prompt tells the model to answer exhausted small talk with exactly
+    // this sentinel; it must never reach the customer as literal text.
+    if (text.trim().toLowerCase() === "[no reply]") {
+      return { kind: "silent" };
+    }
+
     return { kind: "reply", text: text || FALLBACK_REPLY };
   } catch (error) {
     console.error("[brain] turn failed:", error);
